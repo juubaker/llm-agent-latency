@@ -22,14 +22,6 @@ It is **not** an eval harness (it doesn't grade whether an answer is *correct*) 
 
 ## 1. Getting started
 
-```bash
-npm install
-npm run dev        # UI → http://localhost:5173
-npm run server      # demo agents → http://localhost:3001   (optional)
-```
-
-Or in VS Code: open `agent-latency-lab.code-workspace`, then **Terminal → Run Task → "Dev: Both (UI + server)"**.
-
 You don't need the server running to use the Lab — the **Simulated workload** mode works standalone. Run the server if you want to try the **live alert feed** or see real instrumented traces.
 
 ---
