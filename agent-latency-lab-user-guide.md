@@ -22,6 +22,14 @@ It is **not** an eval harness (it doesn't grade whether an answer is *correct*) 
 
 ## 1. Getting started
 
+```bash
+npm install
+npm run dev        # UI → http://localhost:5173
+npm run server      # demo agents → http://localhost:3001   (optional)
+```
+
+Or in VS Code: open `agent-latency-lab.code-workspace`, then **Terminal → Run Task → "Dev: Both (UI + server)"**.
+
 You don't need the server running to use the Lab — the **Simulated workload** mode works standalone. Run the server if you want to try the **live alert feed** or see real instrumented traces.
 
 ---
@@ -227,7 +235,34 @@ Point `OTLP_ENDPOINT` at Jaeger (1.35+), Grafana Tempo, or an OTel Collector, an
 
 ---
 
-## 9. Using the what-if toggles
+## 9. Securing the debug routes before you deploy anywhere
+
+The `/debug/*` routes are convenient in local dev and a real liability anywhere reachable from outside your machine — they expose request bodies, span names, and (once you're tracking cost/RAG) token and pricing data. Gate them before deploying:
+
+```ts
+app.use("/debug", debugAuth({ token: process.env.DEBUG_TOKEN }));
+// or restrict by source IP instead of / in addition to a token:
+app.use("/debug", debugAuth({ allowIps: ["10.0.0.5"] }));
+```
+
+Requests then need `Authorization: Bearer <token>` to reach any `/debug/*` route; everything else (your actual agent endpoints) is untouched. Leave both options unset and requests are still allowed through — but you'll get a one-time console warning telling you to fix that before deploying, rather than the routes staying silently open.
+
+The demo server wires this to a `DEBUG_TOKEN` environment variable and reports its state in the startup banner, so you can see at a glance whether you're running gated or open.
+
+## 10. Running the test suites
+
+If you're extending the tracer or middleware, two Node suites and one Python suite exist to catch regressions:
+
+```bash
+npm run test:unit          # fast — pure logic (parser, cost math, RAG metrics, merge logic): ~0.1s
+npm run test:integration   # slower — real HTTP against the demo app via supertest: ~60s
+npm run test               # both together
+python3 -m unittest discover python/tests -v   # Python tracer parity
+```
+
+Use `test:unit` in your normal edit loop — it's near-instant. Run `test:integration` before anything you'd call "done," since it drives real requests through the actual Express app (including the SLO watcher genuinely firing and a real cross-service `traceparent` handoff), which is the layer unit tests can't see. In VS Code, all three are available as tasks (**Run Task → "Test: Node unit (fast)"** / **"Test: Node integration (supertest, ~60s)"** / **"Test: Python (unittest)"**).
+
+## 11. Using the what-if toggles
 
 These appear once you're in "Paste your trace" mode or the simulated workload:
 
@@ -245,7 +280,7 @@ Flip one, watch the waterfall/percentiles/cost respond immediately, then apply t
 
 ---
 
-## 10. Troubleshooting
+## 12. Troubleshooting
 
 **"Paste a trace to analyze it" won't go away.** Check the span count/error indicator above the textarea — a parse error on even one line will show there. Common cause: a line with a category typo (only `llm`/`retr`/`tool`/`orch` are valid) or a duration that doesn't match `123`, `123ms`, or `1.2s`.
 
@@ -254,3 +289,5 @@ Flip one, watch the waterfall/percentiles/cost respond immediately, then apply t
 **Multi-agent trace looks flat / not forked.** Sequential `@agent` lanes without `(parallel)` markers run one after another by design — that's the sequential-agents pattern the tool is built to expose. Either mark the lanes `(parallel)` in your paste, or use the "Parallelize sub-agents" toggle to see what forking would look like.
 
 **Cost panel isn't appearing.** It only renders when at least one span in the trace has `attrs` with token/model or retrieval-id data — see §6.
+
+**`/debug/*` requests return 401.** You (or the demo server's `DEBUG_TOKEN` env var) have `debugAuth` configured with a required token. Either unset `DEBUG_TOKEN` for local dev, or send `Authorization: Bearer <token>` — the demo server's startup banner tells you which state it's in.
